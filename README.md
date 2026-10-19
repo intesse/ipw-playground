@@ -4,9 +4,15 @@
 
 **Ноутбук (актуальный):** https://colab.research.google.com/drive/1CKbiX8vPp1Hcgk9YrmFN_yx4Z7GuPRWL
 
-## Быстрый старт
+## Публичная ссылка
 
-Откройте `ipw_playground.html` в браузере или загрузите на Google Диск и раздайте ссылку.
+**https://intesse.github.io/ipw-playground/**
+
+Репозиторий: https://github.com/intesse/ipw-playground
+
+## Быстрый старт (локально)
+
+Откройте `ipw_playground.html` в браузере.
 
 Defaults совпадают с ноутбуком/слайдами:
 `confounding=1`, `ATE=+8 п.п.`, `n=100000`, `seed=42`, `trim=0`.
