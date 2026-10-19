@@ -3,99 +3,184 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>IPW Playground · LLM Opt-in</title>
+  <title>IPW — как оценить эффект, когда нет A/B-теста</title>
   <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
   <style>
     :root {
-      --bg: #0f2a24; --bg2: #16352d; --text: #e8eee9; --muted: #9db5ab;
-      --accent: #c8e07a; --danger: #D1495B; --ok: #0F766E; --blue: #5A6578; --teal: #2A9D8F;
+      --bg: #0f2a24; --bg2: #16352d; --card: #1a3d33; --text: #e8eee9; --muted: #9db5ab;
+      --accent: #c8e07a; --danger: #D1495B; --ok: #0F766E; --true: #5A6578; --teal: #2A9D8F;
     }
     * { box-sizing: border-box; }
-    body { margin: 0; font-family: "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); }
-    header { padding: 1.25rem 1.5rem 0.5rem; border-bottom: 1px solid #1e463b; }
-    header h1 { margin: 0 0 0.35rem; font-size: 1.35rem; font-weight: 700; }
-    header p { margin: 0; color: var(--muted); font-size: 0.92rem; max-width: 72rem; line-height: 1.45; }
-    .layout { display: grid; grid-template-columns: 300px 1fr; gap: 1rem; padding: 1rem 1.5rem 1.5rem; align-items: start; }
+    body { margin: 0; font-family: "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; }
+    header { padding: 1.5rem 1.5rem 1rem; border-bottom: 1px solid #1e463b; max-width: 1100px; margin: 0 auto; }
+    header h1 { margin: 0 0 0.5rem; font-size: 1.55rem; font-weight: 700; letter-spacing: -0.02em; }
+    header .lead { margin: 0; color: var(--muted); font-size: 1rem; max-width: 46rem; }
+    .wrap { max-width: 1100px; margin: 0 auto; padding: 1rem 1.5rem 2rem; }
+    .explain {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem; margin-bottom: 1.1rem;
+    }
+    @media (max-width: 860px) { .explain { grid-template-columns: 1fr; } }
+    .explain article {
+      background: var(--bg2); border: 1px solid #1e463b; border-radius: 12px; padding: 0.9rem 1rem;
+    }
+    .explain h2 {
+      margin: 0 0 0.4rem; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent);
+    }
+    .explain p { margin: 0; font-size: 0.88rem; color: var(--text); }
+    .layout { display: grid; grid-template-columns: 290px 1fr; gap: 1rem; align-items: start; }
     @media (max-width: 960px) { .layout { grid-template-columns: 1fr; } }
     .panel { background: var(--bg2); border: 1px solid #1e463b; border-radius: 12px; padding: 1rem; position: sticky; top: 0.75rem; }
-    .panel h2 { margin: 0 0 0.85rem; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); }
-    label { display: block; font-size: 0.82rem; margin: 0.85rem 0 0.25rem; }
-    label .hint { display: block; color: var(--muted); font-size: 0.72rem; margin-top: 0.15rem; line-height: 1.35; }
+    .panel h2 { margin: 0 0 0.35rem; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); }
+    .panel .intro { margin: 0 0 0.7rem; font-size: 0.8rem; color: var(--muted); }
+    label { display: block; font-size: 0.84rem; margin: 0.9rem 0 0.25rem; }
+    label .hint { display: block; color: var(--muted); font-size: 0.72rem; margin-top: 0.2rem; line-height: 1.35; }
     input[type="range"] { width: 100%; accent-color: var(--accent); }
     .val { float: right; font-variant-numeric: tabular-nums; color: var(--accent); font-weight: 600; }
-    button { width: 100%; margin-top: 1.1rem; padding: 0.7rem; border: 0; border-radius: 8px; background: var(--accent); color: #12241e; font-weight: 700; cursor: pointer; }
+    button {
+      width: 100%; margin-top: 1.1rem; padding: 0.7rem; border: 0; border-radius: 8px;
+      background: var(--accent); color: #12241e; font-weight: 700; cursor: pointer; font-size: 0.95rem;
+    }
+    button:hover { filter: brightness(1.05); }
+    .status { margin-top: 0.7rem; font-size: 0.78rem; color: var(--muted); font-variant-numeric: tabular-nums; line-height: 1.4; }
+    .insight {
+      margin-top: 0.75rem; padding: 0.65rem 0.75rem; border-radius: 8px; background: var(--card);
+      font-size: 0.8rem; color: var(--accent); line-height: 1.4;
+    }
     .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.65rem; margin-bottom: 0.85rem; }
     @media (max-width: 960px) { .metrics { grid-template-columns: repeat(2, 1fr); } }
     .metric { background: var(--bg2); border: 1px solid #1e463b; border-radius: 10px; padding: 0.7rem 0.8rem; }
-    .metric .k { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+    .metric .k { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
     .metric .v { font-size: 1.2rem; font-weight: 700; font-variant-numeric: tabular-nums; margin-top: 0.15rem; }
     .metric .v.bad { color: var(--danger); } .metric .v.good { color: #7ac89a; } .metric .v.true { color: #9db5c8; }
     #charts { background: #fff; border-radius: 12px; min-height: 640px; }
-    .tip { margin-top: 0.75rem; padding: 0.75rem 0.9rem; background: var(--bg2); border-left: 3px solid var(--accent); border-radius: 0 8px 8px 0; color: var(--muted); font-size: 0.85rem; line-height: 1.45; }
-    .status { margin-top: 0.65rem; font-size: 0.78rem; color: var(--muted); font-variant-numeric: tabular-nums; line-height: 1.4; }
-    .match { margin-top: 0.75rem; padding: 0.55rem 0.7rem; border-radius: 8px; background: #1a3d33; font-size: 0.75rem; color: var(--accent); line-height: 1.35; }
+    .legend-guide {
+      margin-top: 0.85rem; display: grid; grid-template-columns: 1fr 1fr; gap: 0.65rem;
+    }
+    @media (max-width: 700px) { .legend-guide { grid-template-columns: 1fr; } }
+    .legend-guide div {
+      background: var(--bg2); border: 1px solid #1e463b; border-radius: 10px; padding: 0.7rem 0.85rem; font-size: 0.82rem; color: var(--muted);
+    }
+    .legend-guide strong { color: var(--text); }
+    .tip {
+      margin-top: 0.75rem; padding: 0.8rem 0.95rem; background: var(--bg2); border-left: 3px solid var(--accent);
+      border-radius: 0 8px 8px 0; color: var(--muted); font-size: 0.9rem;
+    }
+    footer { max-width: 1100px; margin: 0 auto; padding: 0 1.5rem 2rem; color: var(--muted); font-size: 0.8rem; }
   </style>
 </head>
 <body>
   <header>
-    <h1>IPW Playground · LLM Opt-in</h1>
-    <p>
-      Симуляция как в обновлённом Colab: opt-in LLM-ассистента → конверсия в подписку.
-      Defaults (confounding=1, ATE=+8 п.п., n=100k, seed=42) воспроизводят цифры слайдов:
-      naive ≈ +18.8 п.п., IPW ≈ +8.2, SMD sessions 1.08 → 0.01, активные включают в 4× чаще.
+    <h1>IPW: как оценить эффект фичи, когда нет честного A/B-теста</h1>
+    <p class="lead">
+      Пользователи сами включают AI-ассистента. Активные включают его чаще — и чаще покупают подписку.
+      Простое сравнение «включили / не включили» завышает эффект. Метод
+      <strong style="color:var(--text)">IPW</strong> (Inverse Probability Weighting)
+      перевзвешивает людей так, будто группы стали сопоставимыми.
     </p>
   </header>
 
-  <div class="layout">
-    <aside class="panel">
-      <h2>Параметры</h2>
+  <div class="wrap">
+    <section class="explain">
+      <article>
+        <h2>1. Проблема</h2>
+        <p>Фичу включают не случайно. В группе «включили» больше вовлечённых пользователей — у них и без фичи выше конверсия. Наивная разность смешивает эффект фичи и состав группы.</p>
+      </article>
+      <article>
+        <h2>2. Идея IPW</h2>
+        <p>Для каждого человека считаем вероятность включить фичу по его признакам. Редкие случаи получают больший вес. Получается «псевдопопуляция», ближе к рандомизации.</p>
+      </article>
+      <article>
+        <h2>3. Что крутить</h2>
+        <p>Двигайте <em>силу самоотбора</em>: чем она выше, тем сильнее наивная оценка врёт. IPW должен оставаться ближе к истине — пока группы ещё пересекаются.</p>
+      </article>
+    </section>
 
-      <label>
-        Сила confounding <span class="val" id="v-conf">1.0</span>
-        <input id="confounding" type="range" min="0" max="2.5" step="0.05" value="1" />
-        <span class="hint">0 ≈ почти RCT · 1 = как в ноутбуке/слайдах · 2+ = хуже overlap</span>
-      </label>
+    <div class="layout">
+      <aside class="panel">
+        <h2>Параметры симуляции</h2>
+        <p class="intro">Данные синтетические: истинный эффект известен, поэтому можно проверить, попал ли метод.</p>
 
-      <label>
-        Истинный эффект, п.п. <span class="val" id="v-ate">8.0</span>
-        <input id="trueAte" type="range" min="0" max="20" step="0.5" value="8" />
-      </label>
+        <label>
+          Сила самоотбора <span class="val" id="v-conf">1.00</span>
+          <input id="confounding" type="range" min="0" max="2.5" step="0.05" value="1" />
+          <span class="hint">0 — почти случайный сплит. 1 — типичный opt-in. 2+ — группы почти не пересекаются.</span>
+        </label>
 
-      <label>
-        Размер выборки n <span class="val" id="v-n">100000</span>
-        <input id="n" type="range" min="10000" max="100000" step="10000" value="100000" />
-      </label>
+        <label>
+          Истинный эффект фичи, п.п. <span class="val" id="v-ate">8.0</span>
+          <input id="trueAte" type="range" min="0" max="20" step="0.5" value="8" />
+          <span class="hint">На сколько процентных пунктов ассистент реально повышает конверсию.</span>
+        </label>
 
-      <label>
-        Trimming ê <span class="val" id="v-trim">0.00</span>
-        <input id="trim" type="range" min="0" max="0.15" step="0.01" value="0" />
-        <span class="hint">Исключить ê вне [t, 1−t] (меняет estimand)</span>
-      </label>
+        <label>
+          Число пользователей <span class="val" id="v-n">100000</span>
+          <input id="n" type="range" min="10000" max="100000" step="10000" value="100000" />
+        </label>
 
-      <label>
-        Seed <span class="val" id="v-seed">42</span>
-        <input id="seed" type="range" min="1" max="200" step="1" value="42" />
-      </label>
+        <label>
+          Обрезка крайних вероятностей <span class="val" id="v-trim">0.00</span>
+          <input id="trim" type="range" min="0" max="0.15" step="0.01" value="0" />
+          <span class="hint">Убирает людей с почти нулевой/единичной вероятностью включения. Оценка стабильнее, но считается уже на другой подвыборке.</span>
+        </label>
 
-      <button id="run">Пересчитать</button>
-      <div class="match" id="match">Сверяю со слайдами…</div>
-      <div class="status" id="status"></div>
-    </aside>
+        <label>
+          Случайность (seed) <span class="val" id="v-seed">42</span>
+          <input id="seed" type="range" min="1" max="200" step="1" value="42" />
+        </label>
 
-    <main>
-      <div class="metrics">
-        <div class="metric"><div class="k">Naive, п.п.</div><div class="v bad" id="m-naive">—</div></div>
-        <div class="metric"><div class="k">IPW Hajek, п.п.</div><div class="v good" id="m-ipw">—</div></div>
-        <div class="metric"><div class="k">Истина, п.п.</div><div class="v true" id="m-true">—</div></div>
-        <div class="metric"><div class="k">SMD sessions</div><div class="v" id="m-smd">—</div></div>
-      </div>
-      <div id="charts"></div>
-      <div class="tip" id="tip">Демо: defaults → confounding до 2.0 → trim 0.05.</div>
-    </main>
+        <button id="run">Пересчитать</button>
+        <div class="insight" id="insight">Считаем…</div>
+        <div class="status" id="status"></div>
+      </aside>
+
+      <main>
+        <div class="metrics">
+          <div class="metric">
+            <div class="k">Наивная оценка, п.п.</div>
+            <div class="v bad" id="m-naive">—</div>
+          </div>
+          <div class="metric">
+            <div class="k">IPW-оценка, п.п.</div>
+            <div class="v good" id="m-ipw">—</div>
+          </div>
+          <div class="metric">
+            <div class="k">Истинный эффект, п.п.</div>
+            <div class="v true" id="m-true">—</div>
+          </div>
+          <div class="metric">
+            <div class="k">Дисбаланс (sessions)</div>
+            <div class="v" id="m-smd">—</div>
+          </div>
+        </div>
+
+        <div id="charts"></div>
+
+        <div class="legend-guide">
+          <div><strong>A.</strong> Вероятность включить фичу у двух групп. Если кривые пересекаются — метод применим.</div>
+          <div><strong>B.</strong> Насколько группы различаются по признакам. После IPW точки должны уйти левее порога 0.1.</div>
+          <div><strong>C.</strong> Веса. Длинный хвост = нестабильность: оценку тянут единицы наблюдений.</div>
+          <div><strong>D.</strong> Три оценки эффекта. Хороший результат: зелёный столбик близко к серому (истине).</div>
+        </div>
+
+        <div class="tip" id="tip">
+          Попробуйте сначала значения по умолчанию, затем поднимите силу самоотбора — и посмотрите, как наивная оценка уезжает вверх.
+        </div>
+      </main>
+    </div>
   </div>
+
+  <footer>
+    Inverse Probability Weighting · интерактивная демонстрация для курса по онлайн-экспериментам
+  </footer>
 
   <script>
     const FEATURES = ["sessions", "tenure", "ios", "prev_purchases"];
+    const FEAT_RU = {
+      sessions: "сессии/нед.",
+      tenure: "срок аккаунта",
+      ios: "iOS",
+      prev_purchases: "прошлые покупки",
+    };
     const C_TREAT = "#2A9D8F", C_CTRL = "#9AA5B1", C_NAIVE = "#D1495B", C_IPW = "#0F766E", C_TRUE = "#5A6578";
 
     function mulberry32(a) {
@@ -107,11 +192,6 @@
       };
     }
     function clip(x, lo, hi) { return Math.min(hi, Math.max(lo, x)); }
-    function randn(rng) {
-      const u = Math.max(rng(), 1e-12), v = rng();
-      return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
-    }
-    // Gamma(shape=2, scale) = Exp + Exp
     function gamma2(rng, scale) {
       return (-Math.log(Math.max(rng(), 1e-12)) - Math.log(Math.max(rng(), 1e-12))) * scale;
     }
@@ -119,17 +199,15 @@
       return -Math.log(Math.max(rng(), 1e-12)) * scale;
     }
     function poisson(rng, lam) {
-      // Knuth for small lam
       const L = Math.exp(-lam);
       let k = 0, p = 1;
       do { k++; p *= rng(); } while (p > L);
       return k - 1;
     }
 
-    // Logistic with intercept + p features (Newton–Raphson)
     function fitLogistic(X, y, maxIter = 30) {
       const n = y.length, p = X[0].length;
-      const beta = new Float64Array(p + 1); // intercept + coeffs
+      const beta = new Float64Array(p + 1);
       for (let it = 0; it < maxIter; it++) {
         const grad = new Float64Array(p + 1);
         const hess = Array.from({ length: p + 1 }, () => new Float64Array(p + 1));
@@ -152,7 +230,6 @@
             }
           }
         }
-        // Solve Hess * d = grad (Gaussian elimination)
         const m = p + 1;
         const A = hess.map((row, i) => Float64Array.from(row).map((v, j) => (i === j ? v + 1e-8 : v)));
         const b = Float64Array.from(grad);
@@ -232,8 +309,6 @@
       const prev = new Float64Array(n);
       const optIn = new Uint8Array(n);
       const converted = new Uint8Array(n);
-      const p0 = new Float64Array(n);
-      const p1 = new Float64Array(n);
 
       for (let i = 0; i < n; i++) {
         sessions[i] = Math.min(gamma2(rng, 2.5), 20);
@@ -248,12 +323,12 @@
         const eTrue = 1 / (1 + Math.exp(-clip(logit, -25, 25)));
         optIn[i] = rng() < eTrue ? 1 : 0;
 
-        p0[i] = clip(0.03 + 0.022 * sessions[i] + 0.03 * ios[i] + 0.02 * prev[i], 0, 1 - effect);
-        p1[i] = p0[i] + effect;
-        converted[i] = rng() < (optIn[i] ? p1[i] : p0[i]) ? 1 : 0;
+        const p0 = clip(0.03 + 0.022 * sessions[i] + 0.03 * ios[i] + 0.02 * prev[i], 0, 1 - effect);
+        const p1 = p0 + effect;
+        converted[i] = rng() < (optIn[i] ? p1 : p0) ? 1 : 0;
       }
 
-      const trueAte = effect; // constant effect → ATE = effect
+      const trueAte = effect;
       let sumT = 0, sumC = 0, nT = 0, nC = 0;
       let actOn = 0, actN = 0, pasOn = 0, pasN = 0;
       for (let i = 0; i < n; i++) {
@@ -264,7 +339,6 @@
       const naiveAte = sumT / nT - sumC / nC;
       const rateActive = actOn / actN, ratePassive = pasOn / pasN;
 
-      // Design matrix
       const X = new Array(n);
       const yT = new Array(n);
       for (let i = 0; i < n; i++) {
@@ -287,19 +361,16 @@
         smdBefore[f] = smd(Array.from(x), tArr, null);
       }
 
-      // Trim mask
       const lo = trim, hi = 1 - trim;
       const idx = [];
       for (let i = 0; i < n; i++) if (eHat[i] > lo && eHat[i] < hi) idx.push(i);
       if (idx.filter((i) => optIn[i]).length < 50 || idx.filter((i) => !optIn[i]).length < 50) {
-        throw new Error("После trimming слишком мало наблюдений — уменьшите trim или confounding.");
+        throw new Error("После обрезки слишком мало людей. Уменьшите обрезку или силу самоотбора.");
       }
 
       let sw1 = 0, sw0 = 0, sy1 = 0, sy0 = 0;
       const eT = [], eC = [], wAll = [], wT = [], wC = [];
-      const keepT = new Uint8Array(n);
       for (const i of idx) {
-        keepT[i] = 1;
         wAll.push(w[i]);
         if (optIn[i]) {
           sw1 += w[i]; sy1 += w[i] * converted[i]; eT.push(eHat[i]); wT.push(w[i]);
@@ -309,10 +380,11 @@
       }
       const ipwAte = sy1 / sw1 - sy0 / sw0;
 
-      // SMD after on trimmed sample with weights
       const smdAfter = {};
       for (const f of FEATURES) {
-        const x = f === "ios" ? Array.from(ios) : (f === "prev_purchases" ? Array.from(prev) : Array.from(f === "sessions" ? sessions : tenure));
+        const x = f === "ios" ? Array.from(ios)
+          : (f === "prev_purchases" ? Array.from(prev)
+            : Array.from(f === "sessions" ? sessions : tenure));
         const xt = [], tt = [], ww = [];
         for (const i of idx) { xt.push(x[i]); tt.push(optIn[i]); ww.push(w[i]); }
         smdAfter[f] = smd(xt, tt, ww);
@@ -342,7 +414,8 @@
     function render(r) {
       const naivePp = r.naiveAte * 100, ipwPp = r.ipwAte * 100, truePp = r.trueAte * 100;
       const s0 = r.smdBefore.sessions, s1 = r.smdAfter.sessions;
-      const ratio = naivePp / truePp;
+      const ratio = naivePp / Math.max(Math.abs(truePp), 1e-6);
+      const biasShare = truePp === 0 ? 0 : ((naivePp - truePp) / naivePp) * 100;
 
       document.getElementById("m-naive").textContent = `+${naivePp.toFixed(1)}`;
       document.getElementById("m-ipw").textContent = `+${ipwPp.toFixed(1)}`;
@@ -350,24 +423,22 @@
       document.getElementById("m-smd").textContent = `${s0.toFixed(2)} → ${s1.toFixed(3)}`;
 
       document.getElementById("status").textContent =
-        `n=${r.n.toLocaleString("ru")} → trim ${r.kept.toLocaleString("ru")} · ` +
-        `включили ${(100 * r.nT / r.n).toFixed(1)}% · ` +
-        `активные ${ (100 * r.rateActive).toFixed(0)}% vs ${ (100 * r.ratePassive).toFixed(0)}% ` +
-        `(×${(r.rateActive / r.ratePassive).toFixed(1)}) · ` +
-        `ESS ${r.essT.toFixed(0)}/${r.essC.toFixed(0)} · max w=${r.maxW.toFixed(0)} · ` +
-        `naive ≈ ${ratio.toFixed(1)}× истины`;
+        `${r.n.toLocaleString("ru")} пользователей · включили ${(100 * r.nT / r.n).toFixed(0)}% · ` +
+        `активные включают в ${(r.rateActive / r.ratePassive).toFixed(1)}× чаще ` +
+        `(${(100 * r.rateActive).toFixed(0)}% vs ${(100 * r.ratePassive).toFixed(0)}%)`;
 
-      // Match badge vs slide targets (defaults)
-      const slideOk =
-        Math.abs(naivePp - 18.8) < 1.5 &&
-        Math.abs(ipwPp - 8.2) < 1.0 &&
-        Math.abs(s0 - 1.08) < 0.15 &&
-        Math.abs(s1) < 0.05;
-      const match = document.getElementById("match");
-      if (slideOk) {
-        match.textContent = "✓ Близко к цифрам слайдов/ноутбука (naive≈18.8, IPW≈8.2, SMD≈1.08→0.01)";
+      const insight = document.getElementById("insight");
+      if (confounding.valueAsNumber < 0.15) {
+        insight.textContent = "Почти случайный сплит: наивная оценка и IPW близки к истине. IPW почти не нужен.";
+      } else if (Math.abs(s1) > 0.1) {
+        insight.textContent = "После перевзвешивания группы всё ещё разные — условия метода нарушены, оценке нельзя доверять.";
+      } else if (r.maxW > 80) {
+        insight.textContent = "Веса стали огромными: оценку держат единицы людей. Попробуйте обрезку или снизьте самоотбор.";
       } else {
-        match.textContent = "Цифры отличаются от слайдов — для совпадения: confounding=1, ATE=8, n=100000, seed=42, trim=0";
+        insight.textContent =
+          `Наивная оценка завышена примерно в ${ratio.toFixed(1)}×` +
+          (biasShare > 0 ? ` (~${biasShare.toFixed(0)}% «эффекта» — это состав группы, а не фича)` : "") +
+          `. IPW ближе к истине.`;
       }
 
       const ht = hist(r.eT, 40, 0, 1);
@@ -375,9 +446,9 @@
       const wAll = r.wT.concat(r.wC).map((w) => Math.min(w, r.wCap));
       const hw = hist(wAll, 40, 1, r.wCap);
 
-      const featLabels = FEATURES;
-      const beforeAbs = featLabels.map((f) => Math.abs(r.smdBefore[f]));
-      const afterAbs = featLabels.map((f) => Math.abs(r.smdAfter[f]));
+      const featLabels = FEATURES.map((f) => FEAT_RU[f]);
+      const beforeAbs = FEATURES.map((f) => Math.abs(r.smdBefore[f]));
+      const afterAbs = FEATURES.map((f) => Math.abs(r.smdAfter[f]));
 
       const traces = [
         { x: hc.centers, y: hc.density, type: "bar", name: "Не включили", marker: { color: "rgba(154,165,177,0.65)" }, xaxis: "x", yaxis: "y" },
@@ -399,23 +470,23 @@
 
       const layout = {
         height: 640,
-        margin: { t: 48, r: 24, b: 48, l: 70 },
+        margin: { t: 48, r: 24, b: 48, l: 90 },
         paper_bgcolor: "#fff", plot_bgcolor: "#fff", barmode: "overlay",
         font: { family: "Segoe UI, system-ui, sans-serif", size: 12 },
         legend: { orientation: "h", y: 1.14, x: 0 },
-        xaxis: { title: "ê(x)", domain: [0, 0.46], anchor: "y" },
+        xaxis: { title: "Вероятность включить фичу", domain: [0, 0.46], anchor: "y" },
         yaxis: { title: "Плотность", domain: [0.58, 1], anchor: "x" },
-        xaxis2: { title: "|SMD|", domain: [0.56, 1], anchor: "y2", range: [0, Math.max(1.2, ...beforeAbs) * 1.1] },
+        xaxis2: { title: "Насколько группы разные", domain: [0.56, 1], anchor: "y2", range: [0, Math.max(1.2, ...beforeAbs) * 1.1] },
         yaxis2: { domain: [0.58, 1], anchor: "x2", categoryorder: "array", categoryarray: featLabels.slice().reverse() },
-        xaxis3: { title: "Вес w (до p99.5)", domain: [0, 0.46], anchor: "y3" },
-        yaxis3: { title: "Число польз.", type: "log", domain: [0, 0.42], anchor: "x3" },
+        xaxis3: { title: "Вес наблюдения", domain: [0, 0.46], anchor: "y3" },
+        yaxis3: { title: "Число людей", type: "log", domain: [0, 0.42], anchor: "x3" },
         xaxis4: { domain: [0.56, 1], anchor: "y4" },
-        yaxis4: { title: "Эффект, п.п.", domain: [0, 0.42], anchor: "x4", range: [0, Math.max(naivePp, truePp) * 1.3] },
+        yaxis4: { title: "Эффект, п.п.", domain: [0, 0.42], anchor: "x4", range: [0, Math.max(naivePp, truePp, 1) * 1.3] },
         annotations: [
-          { text: "A. Propensity (overlap)", xref: "paper", yref: "paper", x: 0, y: 1.02, showarrow: false, xanchor: "left", font: { size: 13 } },
-          { text: "B. Баланс ковариат |SMD|", xref: "paper", yref: "paper", x: 0.56, y: 1.02, showarrow: false, xanchor: "left", font: { size: 13 } },
-          { text: "C. IPW-веса", xref: "paper", yref: "paper", x: 0, y: 0.46, showarrow: false, xanchor: "left", font: { size: 13 } },
-          { text: "D. Оценки ATE, п.п.", xref: "paper", yref: "paper", x: 0.56, y: 0.46, showarrow: false, xanchor: "left", font: { size: 13 } },
+          { text: "A. Пересечение групп", xref: "paper", yref: "paper", x: 0, y: 1.02, showarrow: false, xanchor: "left", font: { size: 13 } },
+          { text: "B. Баланс признаков", xref: "paper", yref: "paper", x: 0.56, y: 1.02, showarrow: false, xanchor: "left", font: { size: 13 } },
+          { text: "C. Веса", xref: "paper", yref: "paper", x: 0, y: 0.46, showarrow: false, xanchor: "left", font: { size: 13 } },
+          { text: "D. Оценка эффекта", xref: "paper", yref: "paper", x: 0.56, y: 0.46, showarrow: false, xanchor: "left", font: { size: 13 } },
         ],
         shapes: [
           { type: "line", xref: "x2", yref: "y2", x0: 0.1, x1: 0.1, y0: -0.5, y1: 3.5, line: { dash: "dash", color: "#9CA3AF", width: 1 } },
@@ -427,13 +498,11 @@
 
       const tip = document.getElementById("tip");
       if (confounding.valueAsNumber < 0.15) {
-        tip.textContent = "Почти нет self-selection: naive ≈ IPW ≈ истине. Хороший старт объяснения «зачем IPW».";
-      } else if (Math.abs(s1) > 0.1) {
-        tip.textContent = "После IPW баланс плохой — как на слайде границ: модель/overlap не тянут.";
-      } else if (r.maxW > 80) {
-        tip.textContent = "Экстремальные веса: поднимите trim или снизьте confounding — ESS падает.";
+        tip.textContent = "Сейчас почти нет самоотбора. Поднимите «силу самоотбора», чтобы увидеть, зачем нужен IPW.";
+      } else if (Math.abs(ipwPp - truePp) < Math.abs(naivePp - truePp) * 0.4) {
+        tip.textContent = "IPW заметно ближе к истине, чем наивное сравнение. Это и есть смысл метода.";
       } else {
-        tip.textContent = "Классика доклада: активные включают чаще → naive завышает → IPW возвращает ~+8 п.п., SMD sessions падает ниже 0.1.";
+        tip.textContent = "Покрутите параметры: метод работает не всегда — особенно при очень сильном самоотборе.";
       }
     }
 
@@ -465,8 +534,7 @@
       syncLabels();
       const status = document.getElementById("status");
       try {
-        status.textContent = "Считаю (логистика + n до 100k)…";
-        // yield to UI
+        status.textContent = "Считаю…";
         requestAnimationFrame(() => {
           try {
             render(simulate(readParams()));
