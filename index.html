@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>IPW Playground · LLM Opt-in</title>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <style>
+    :root {
+      --bg: #0f2a24; --bg2: #16352d; --text: #e8eee9; --muted: #9db5ab;
+      --accent: #c8e07a; --danger: #D1495B; --ok: #0F766E; --blue: #5A6578; --teal: #2A9D8F;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); }
+    header { padding: 1.25rem 1.5rem 0.5rem; border-bottom: 1px solid #1e463b; }
+    header h1 { margin: 0 0 0.35rem; font-size: 1.35rem; font-weight: 700; }
+    header p { margin: 0; color: var(--muted); font-size: 0.92rem; max-width: 72rem; line-height: 1.45; }
+    .layout { display: grid; grid-template-columns: 300px 1fr; gap: 1rem; padding: 1rem 1.5rem 1.5rem; align-items: start; }
+    @media (max-width: 960px) { .layout { grid-template-columns: 1fr; } }
+    .panel { background: var(--bg2); border: 1px solid #1e463b; border-radius: 12px; padding: 1rem; position: sticky; top: 0.75rem; }
+    .panel h2 { margin: 0 0 0.85rem; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); }
+    label { display: block; font-size: 0.82rem; margin: 0.85rem 0 0.25rem; }
+    label .hint { display: block; color: var(--muted); font-size: 0.72rem; margin-top: 0.15rem; line-height: 1.35; }
+    input[type="range"] { width: 100%; accent-color: var(--accent); }
+    .val { float: right; font-variant-numeric: tabular-nums; color: var(--accent); font-weight: 600; }
+    button { width: 100%; margin-top: 1.1rem; padding: 0.7rem; border: 0; border-radius: 8px; background: var(--accent); color: #12241e; font-weight: 700; cursor: pointer; }
+    .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.65rem; margin-bottom: 0.85rem; }
+    @media (max-width: 960px) { .metrics { grid-template-columns: repeat(2, 1fr); } }
+    .metric { background: var(--bg2); border: 1px solid #1e463b; border-radius: 10px; padding: 0.7rem 0.8rem; }
+    .metric .k { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+    .metric .v { font-size: 1.2rem; font-weight: 700; font-variant-numeric: tabular-nums; margin-top: 0.15rem; }
+    .metric .v.bad { color: var(--danger); } .metric .v.good { color: #7ac89a; } .metric .v.true { color: #9db5c8; }
+    #charts { background: #fff; border-radius: 12px; min-height: 640px; }
+    .tip { margin-top: 0.75rem; padding: 0.75rem 0.9rem; background: var(--bg2); border-left: 3px solid var(--accent); border-radius: 0 8px 8px 0; color: var(--muted); font-size: 0.85rem; line-height: 1.45; }
+    .status { margin-top: 0.65rem; font-size: 0.78rem; color: var(--muted); font-variant-numeric: tabular-nums; line-height: 1.4; }
+    .match { margin-top: 0.75rem; padding: 0.55rem 0.7rem; border-radius: 8px; background: #1a3d33; font-size: 0.75rem; color: var(--accent); line-height: 1.35; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>IPW Playground · LLM Opt-in</h1>
+    <p>
+      Симуляция как в обновлённом Colab: opt-in LLM-ассистента → конверсия в подписку.
+      Defaults (confounding=1, ATE=+8 п.п., n=100k, seed=42) воспроизводят цифры слайдов:
+      naive ≈ +18.8 п.п., IPW ≈ +8.2, SMD sessions 1.08 → 0.01, активные включают в 4× чаще.
+    </p>
+  </header>
+
+  <div class="layout">
+    <aside class="panel">
+      <h2>Параметры</h2>
+
+      <label>
+        Сила confounding <span class="val" id="v-conf">1.0</span>
+        <input id="confounding" type="range" min="0" max="2.5" step="0.05" value="1" />
+        <span class="hint">0 ≈ почти RCT · 1 = как в ноутбуке/слайдах · 2+ = хуже overlap</span>
+      </label>
+
+      <label>
+        Истинный эффект, п.п. <span class="val" id="v-ate">8.0</span>
+        <input id="trueAte" type="range" min="0" max="20" step="0.5" value="8" />
+      </label>
+
+      <label>
+        Размер выборки n <span class="val" id="v-n">100000</span>
+        <input id="n" type="range" min="10000" max="100000" step="10000" value="100000" />
+      </label>
+
+      <label>
+        Trimming ê <span class="val" id="v-trim">0.00</span>
+        <input id="trim" type="range" min="0" max="0.15" step="0.01" value="0" />
+        <span class="hint">Исключить ê вне [t, 1−t] (меняет estimand)</span>
+      </label>
+
+      <label>
+        Seed <span class="val" id="v-seed">42</span>
+        <input id="seed" type="range" min="1" max="200" step="1" value="42" />
+      </label>
+
+      <button id="run">Пересчитать</button>
+      <div class="match" id="match">Сверяю со слайдами…</div>
+      <div class="status" id="status"></div>
+    </aside>
+
+    <main>
+      <div class="metrics">
+        <div class="metric"><div class="k">Naive, п.п.</div><div class="v bad" id="m-naive">—</div></div>
+        <div class="metric"><div class="k">IPW Hajek, п.п.</div><div class="v good" id="m-ipw">—</div></div>
+        <div class="metric"><div class="k">Истина, п.п.</div><div class="v true" id="m-true">—</div></div>
+        <div class="metric"><div class="k">SMD sessions</div><div class="v" id="m-smd">—</div></div>
+      </div>
+      <div id="charts"></div>
+      <div class="tip" id="tip">Демо: defaults → confounding до 2.0 → trim 0.05.</div>
+    </main>
+  </div>
+
+  <script>
+    const FEATURES = ["sessions", "tenure", "ios", "prev_purchases"];
+    const C_TREAT = "#2A9D8F", C_CTRL = "#9AA5B1", C_NAIVE = "#D1495B", C_IPW = "#0F766E", C_TRUE = "#5A6578";
+
+    function mulberry32(a) {
+      return function () {
+        let t = (a += 0x6d2b79f5);
+        t = Math.imul(t ^ (t >>> 15), t | 1);
+        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+    }
+    function clip(x, lo, hi) { return Math.min(hi, Math.max(lo, x)); }
+    function randn(rng) {
+      const u = Math.max(rng(), 1e-12), v = rng();
+      return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+    }
+    // Gamma(shape=2, scale) = Exp + Exp
+    function gamma2(rng, scale) {
+      return (-Math.log(Math.max(rng(), 1e-12)) - Math.log(Math.max(rng(), 1e-12))) * scale;
+    }
+    function exponential(rng, scale) {
+      return -Math.log(Math.max(rng(), 1e-12)) * scale;
+    }
+    function poisson(rng, lam) {
+      // Knuth for small lam
+      const L = Math.exp(-lam);
+      let k = 0, p = 1;
+      do { k++; p *= rng(); } while (p > L);
+      return k - 1;
+    }
+
+    // Logistic with intercept + p features (Newton–Raphson)
+    function fitLogistic(X, y, maxIter = 30) {
+      const n = y.length, p = X[0].length;
+      const beta = new Float64Array(p + 1); // intercept + coeffs
+      for (let it = 0; it < maxIter; it++) {
+        const grad = new Float64Array(p + 1);
+        const hess = Array.from({ length: p + 1 }, () => new Float64Array(p + 1));
+        for (let i = 0; i < n; i++) {
+          let eta = beta[0];
+          for (let j = 0; j < p; j++) eta += beta[j + 1] * X[i][j];
+          const pr = 1 / (1 + Math.exp(-clip(eta, -25, 25)));
+          const w = pr * (1 - pr);
+          const r = y[i] - pr;
+          grad[0] += r;
+          hess[0][0] += w;
+          for (let j = 0; j < p; j++) {
+            grad[j + 1] += r * X[i][j];
+            hess[0][j + 1] += w * X[i][j];
+            hess[j + 1][0] += w * X[i][j];
+            for (let k = j; k < p; k++) {
+              const h = w * X[i][j] * X[i][k];
+              hess[j + 1][k + 1] += h;
+              if (k !== j) hess[k + 1][j + 1] += h;
+            }
+          }
+        }
+        // Solve Hess * d = grad (Gaussian elimination)
+        const m = p + 1;
+        const A = hess.map((row, i) => Float64Array.from(row).map((v, j) => (i === j ? v + 1e-8 : v)));
+        const b = Float64Array.from(grad);
+        for (let col = 0; col < m; col++) {
+          let piv = col;
+          for (let r = col + 1; r < m; r++) if (Math.abs(A[r][col]) > Math.abs(A[piv][col])) piv = r;
+          [A[col], A[piv]] = [A[piv], A[col]];
+          [b[col], b[piv]] = [b[piv], b[col]];
+          const div = A[col][col];
+          if (Math.abs(div) < 1e-12) continue;
+          for (let r = col + 1; r < m; r++) {
+            const f = A[r][col] / div;
+            for (let c = col; c < m; c++) A[r][c] -= f * A[col][c];
+            b[r] -= f * b[col];
+          }
+        }
+        const d = new Float64Array(m);
+        for (let i = m - 1; i >= 0; i--) {
+          let s = b[i];
+          for (let c = i + 1; c < m; c++) s -= A[i][c] * d[c];
+          d[i] = s / (A[i][i] || 1e-12);
+        }
+        let step = 0;
+        for (let j = 0; j < m; j++) { beta[j] += d[j]; step += Math.abs(d[j]); }
+        if (step < 1e-8) break;
+      }
+      return beta;
+    }
+
+    function predictPs(beta, row) {
+      let eta = beta[0];
+      for (let j = 0; j < row.length; j++) eta += beta[j + 1] * row[j];
+      return clip(1 / (1 + Math.exp(-clip(eta, -25, 25))), 1e-4, 1 - 1e-4);
+    }
+
+    function smd(x, t, w) {
+      const x1 = [], x0 = [], w1 = [], w0 = [];
+      for (let i = 0; i < x.length; i++) {
+        if (t[i]) { x1.push(x[i]); w1.push(w ? w[i] : 1); }
+        else { x0.push(x[i]); w0.push(w ? w[i] : 1); }
+      }
+      const avg = (a, ww) => {
+        let s = 0, sw = 0;
+        for (let i = 0; i < a.length; i++) { s += a[i] * ww[i]; sw += ww[i]; }
+        return s / sw;
+      };
+      const m1 = avg(x1, w1), m0 = avg(x0, w0);
+      let v1 = 0, v0 = 0, sw1 = 0, sw0 = 0;
+      for (let i = 0; i < x1.length; i++) { v1 += w1[i] * (x1[i] - m1) ** 2; sw1 += w1[i]; }
+      for (let i = 0; i < x0.length; i++) { v0 += w0[i] * (x0[i] - m0) ** 2; sw0 += w0[i]; }
+      v1 /= sw1; v0 /= sw0;
+      return (m1 - m0) / Math.sqrt((v1 + v0) / 2);
+    }
+
+    function hist(values, bins, xmin, xmax) {
+      const counts = new Array(bins).fill(0);
+      const step = (xmax - xmin) / bins;
+      for (const v of values) {
+        if (v < xmin || v > xmax) continue;
+        let b = Math.floor((v - xmin) / step);
+        if (b >= bins) b = bins - 1;
+        counts[b]++;
+      }
+      const centers = counts.map((_, i) => xmin + (i + 0.5) * step);
+      const density = counts.map((c) => c / (values.length * step || 1));
+      return { centers, density, counts };
+    }
+
+    function simulate(params) {
+      const { confounding, trueAtePp, n, trim, seed } = params;
+      const effect = trueAtePp / 100;
+      const rng = mulberry32(seed >>> 0);
+
+      const sessions = new Float64Array(n);
+      const tenure = new Float64Array(n);
+      const ios = new Uint8Array(n);
+      const prev = new Float64Array(n);
+      const optIn = new Uint8Array(n);
+      const converted = new Uint8Array(n);
+      const p0 = new Float64Array(n);
+      const p1 = new Float64Array(n);
+
+      for (let i = 0; i < n; i++) {
+        sessions[i] = Math.min(gamma2(rng, 2.5), 20);
+        tenure[i] = exponential(rng, 10);
+        ios[i] = rng() < 0.4 ? 1 : 0;
+        prev[i] = poisson(rng, 0.2 * sessions[i]);
+
+        const logit = -3.2
+          + confounding * (0.30 * sessions[i] + 0.10 * prev[i])
+          + 0.25 * ios[i]
+          - 0.02 * tenure[i];
+        const eTrue = 1 / (1 + Math.exp(-clip(logit, -25, 25)));
+        optIn[i] = rng() < eTrue ? 1 : 0;
+
+        p0[i] = clip(0.03 + 0.022 * sessions[i] + 0.03 * ios[i] + 0.02 * prev[i], 0, 1 - effect);
+        p1[i] = p0[i] + effect;
+        converted[i] = rng() < (optIn[i] ? p1[i] : p0[i]) ? 1 : 0;
+      }
+
+      const trueAte = effect; // constant effect → ATE = effect
+      let sumT = 0, sumC = 0, nT = 0, nC = 0;
+      let actOn = 0, actN = 0, pasOn = 0, pasN = 0;
+      for (let i = 0; i < n; i++) {
+        if (optIn[i]) { sumT += converted[i]; nT++; } else { sumC += converted[i]; nC++; }
+        if (sessions[i] >= 7) { actN++; actOn += optIn[i]; }
+        else { pasN++; pasOn += optIn[i]; }
+      }
+      const naiveAte = sumT / nT - sumC / nC;
+      const rateActive = actOn / actN, ratePassive = pasOn / pasN;
+
+      // Design matrix
+      const X = new Array(n);
+      const yT = new Array(n);
+      for (let i = 0; i < n; i++) {
+        X[i] = [sessions[i], tenure[i], ios[i], prev[i]];
+        yT[i] = optIn[i];
+      }
+      const beta = fitLogistic(X, yT);
+      const eHat = new Float64Array(n);
+      const w = new Float64Array(n);
+      for (let i = 0; i < n; i++) {
+        eHat[i] = predictPs(beta, X[i]);
+        w[i] = optIn[i] ? 1 / eHat[i] : 1 / (1 - eHat[i]);
+      }
+
+      const tArr = Array.from(optIn);
+      const smdBefore = {};
+      const feats = { sessions, tenure, ios: Array.from(ios), prev_purchases: prev };
+      for (const f of FEATURES) {
+        const x = f === "ios" ? feats.ios : (f === "prev_purchases" ? feats.prev_purchases : feats[f]);
+        smdBefore[f] = smd(Array.from(x), tArr, null);
+      }
+
+      // Trim mask
+      const lo = trim, hi = 1 - trim;
+      const idx = [];
+      for (let i = 0; i < n; i++) if (eHat[i] > lo && eHat[i] < hi) idx.push(i);
+      if (idx.filter((i) => optIn[i]).length < 50 || idx.filter((i) => !optIn[i]).length < 50) {
+        throw new Error("После trimming слишком мало наблюдений — уменьшите trim или confounding.");
+      }
+
+      let sw1 = 0, sw0 = 0, sy1 = 0, sy0 = 0;
+      const eT = [], eC = [], wAll = [], wT = [], wC = [];
+      const keepT = new Uint8Array(n);
+      for (const i of idx) {
+        keepT[i] = 1;
+        wAll.push(w[i]);
+        if (optIn[i]) {
+          sw1 += w[i]; sy1 += w[i] * converted[i]; eT.push(eHat[i]); wT.push(w[i]);
+        } else {
+          sw0 += w[i]; sy0 += w[i] * converted[i]; eC.push(eHat[i]); wC.push(w[i]);
+        }
+      }
+      const ipwAte = sy1 / sw1 - sy0 / sw0;
+
+      // SMD after on trimmed sample with weights
+      const smdAfter = {};
+      for (const f of FEATURES) {
+        const x = f === "ios" ? Array.from(ios) : (f === "prev_purchases" ? Array.from(prev) : Array.from(f === "sessions" ? sessions : tenure));
+        const xt = [], tt = [], ww = [];
+        for (const i of idx) { xt.push(x[i]); tt.push(optIn[i]); ww.push(w[i]); }
+        smdAfter[f] = smd(xt, tt, ww);
+      }
+
+      const ess = (arr) => {
+        const s = arr.reduce((a, b) => a + b, 0);
+        const s2 = arr.reduce((a, b) => a + b * b, 0);
+        return (s * s) / s2;
+      };
+
+      return {
+        naiveAte, ipwAte, trueAte,
+        smdBefore, smdAfter,
+        n, kept: idx.length, nT,
+        rateActive, ratePassive,
+        essT: ess(wT), essC: ess(wC),
+        maxW: Math.max(...wAll),
+        eT, eC, wT, wC,
+        wCap: (() => {
+          const s = wAll.slice().sort((a, b) => a - b);
+          return s[Math.floor(0.995 * (s.length - 1))];
+        })(),
+      };
+    }
+
+    function render(r) {
+      const naivePp = r.naiveAte * 100, ipwPp = r.ipwAte * 100, truePp = r.trueAte * 100;
+      const s0 = r.smdBefore.sessions, s1 = r.smdAfter.sessions;
+      const ratio = naivePp / truePp;
+
+      document.getElementById("m-naive").textContent = `+${naivePp.toFixed(1)}`;
+      document.getElementById("m-ipw").textContent = `+${ipwPp.toFixed(1)}`;
+      document.getElementById("m-true").textContent = `+${truePp.toFixed(1)}`;
+      document.getElementById("m-smd").textContent = `${s0.toFixed(2)} → ${s1.toFixed(3)}`;
+
+      document.getElementById("status").textContent =
+        `n=${r.n.toLocaleString("ru")} → trim ${r.kept.toLocaleString("ru")} · ` +
+        `включили ${(100 * r.nT / r.n).toFixed(1)}% · ` +
+        `активные ${ (100 * r.rateActive).toFixed(0)}% vs ${ (100 * r.ratePassive).toFixed(0)}% ` +
+        `(×${(r.rateActive / r.ratePassive).toFixed(1)}) · ` +
+        `ESS ${r.essT.toFixed(0)}/${r.essC.toFixed(0)} · max w=${r.maxW.toFixed(0)} · ` +
+        `naive ≈ ${ratio.toFixed(1)}× истины`;
+
+      // Match badge vs slide targets (defaults)
+      const slideOk =
+        Math.abs(naivePp - 18.8) < 1.5 &&
+        Math.abs(ipwPp - 8.2) < 1.0 &&
+        Math.abs(s0 - 1.08) < 0.15 &&
+        Math.abs(s1) < 0.05;
+      const match = document.getElementById("match");
+      if (slideOk) {
+        match.textContent = "✓ Близко к цифрам слайдов/ноутбука (naive≈18.8, IPW≈8.2, SMD≈1.08→0.01)";
+      } else {
+        match.textContent = "Цифры отличаются от слайдов — для совпадения: confounding=1, ATE=8, n=100000, seed=42, trim=0";
+      }
+
+      const ht = hist(r.eT, 40, 0, 1);
+      const hc = hist(r.eC, 40, 0, 1);
+      const wAll = r.wT.concat(r.wC).map((w) => Math.min(w, r.wCap));
+      const hw = hist(wAll, 40, 1, r.wCap);
+
+      const featLabels = FEATURES;
+      const beforeAbs = featLabels.map((f) => Math.abs(r.smdBefore[f]));
+      const afterAbs = featLabels.map((f) => Math.abs(r.smdAfter[f]));
+
+      const traces = [
+        { x: hc.centers, y: hc.density, type: "bar", name: "Не включили", marker: { color: "rgba(154,165,177,0.65)" }, xaxis: "x", yaxis: "y" },
+        { x: ht.centers, y: ht.density, type: "bar", name: "Включили", marker: { color: "rgba(42,157,143,0.65)" }, xaxis: "x", yaxis: "y" },
+        { x: beforeAbs, y: featLabels, type: "scatter", mode: "markers", name: "До IPW", marker: { size: 12, color: C_NAIVE }, xaxis: "x2", yaxis: "y2" },
+        { x: afterAbs, y: featLabels, type: "scatter", mode: "markers", name: "После IPW", marker: { size: 12, color: C_IPW }, xaxis: "x2", yaxis: "y2" },
+        { x: hw.centers, y: hw.counts, type: "bar", showlegend: false, marker: { color: "rgba(15,118,110,0.7)" }, xaxis: "x3", yaxis: "y3" },
+        {
+          x: ["Наивная", "IPW", "Истина"],
+          y: [naivePp, ipwPp, truePp],
+          type: "bar",
+          marker: { color: [C_NAIVE, C_IPW, C_TRUE] },
+          text: [naivePp.toFixed(1), ipwPp.toFixed(1), truePp.toFixed(1)],
+          textposition: "outside",
+          showlegend: false,
+          xaxis: "x4", yaxis: "y4",
+        },
+      ];
+
+      const layout = {
+        height: 640,
+        margin: { t: 48, r: 24, b: 48, l: 70 },
+        paper_bgcolor: "#fff", plot_bgcolor: "#fff", barmode: "overlay",
+        font: { family: "Segoe UI, system-ui, sans-serif", size: 12 },
+        legend: { orientation: "h", y: 1.14, x: 0 },
+        xaxis: { title: "ê(x)", domain: [0, 0.46], anchor: "y" },
+        yaxis: { title: "Плотность", domain: [0.58, 1], anchor: "x" },
+        xaxis2: { title: "|SMD|", domain: [0.56, 1], anchor: "y2", range: [0, Math.max(1.2, ...beforeAbs) * 1.1] },
+        yaxis2: { domain: [0.58, 1], anchor: "x2", categoryorder: "array", categoryarray: featLabels.slice().reverse() },
+        xaxis3: { title: "Вес w (до p99.5)", domain: [0, 0.46], anchor: "y3" },
+        yaxis3: { title: "Число польз.", type: "log", domain: [0, 0.42], anchor: "x3" },
+        xaxis4: { domain: [0.56, 1], anchor: "y4" },
+        yaxis4: { title: "Эффект, п.п.", domain: [0, 0.42], anchor: "x4", range: [0, Math.max(naivePp, truePp) * 1.3] },
+        annotations: [
+          { text: "A. Propensity (overlap)", xref: "paper", yref: "paper", x: 0, y: 1.02, showarrow: false, xanchor: "left", font: { size: 13 } },
+          { text: "B. Баланс ковариат |SMD|", xref: "paper", yref: "paper", x: 0.56, y: 1.02, showarrow: false, xanchor: "left", font: { size: 13 } },
+          { text: "C. IPW-веса", xref: "paper", yref: "paper", x: 0, y: 0.46, showarrow: false, xanchor: "left", font: { size: 13 } },
+          { text: "D. Оценки ATE, п.п.", xref: "paper", yref: "paper", x: 0.56, y: 0.46, showarrow: false, xanchor: "left", font: { size: 13 } },
+        ],
+        shapes: [
+          { type: "line", xref: "x2", yref: "y2", x0: 0.1, x1: 0.1, y0: -0.5, y1: 3.5, line: { dash: "dash", color: "#9CA3AF", width: 1 } },
+          { type: "line", xref: "x4", yref: "y4", x0: -0.5, x1: 2.5, y0: truePp, y1: truePp, line: { dash: "dash", color: "#111", width: 1 } },
+        ],
+      };
+
+      Plotly.react("charts", traces, layout, { responsive: true, displayModeBar: false });
+
+      const tip = document.getElementById("tip");
+      if (confounding.valueAsNumber < 0.15) {
+        tip.textContent = "Почти нет self-selection: naive ≈ IPW ≈ истине. Хороший старт объяснения «зачем IPW».";
+      } else if (Math.abs(s1) > 0.1) {
+        tip.textContent = "После IPW баланс плохой — как на слайде границ: модель/overlap не тянут.";
+      } else if (r.maxW > 80) {
+        tip.textContent = "Экстремальные веса: поднимите trim или снизьте confounding — ESS падает.";
+      } else {
+        tip.textContent = "Классика доклада: активные включают чаще → naive завышает → IPW возвращает ~+8 п.п., SMD sessions падает ниже 0.1.";
+      }
+    }
+
+    function readParams() {
+      return {
+        confounding: +document.getElementById("confounding").value,
+        trueAtePp: +document.getElementById("trueAte").value,
+        n: +document.getElementById("n").value,
+        trim: +document.getElementById("trim").value,
+        seed: +document.getElementById("seed").value,
+      };
+    }
+    function syncLabels() {
+      const p = readParams();
+      document.getElementById("v-conf").textContent = p.confounding.toFixed(2);
+      document.getElementById("v-ate").textContent = p.trueAtePp.toFixed(1);
+      document.getElementById("v-n").textContent = p.n.toLocaleString("en-US");
+      document.getElementById("v-trim").textContent = p.trim.toFixed(2);
+      document.getElementById("v-seed").textContent = String(p.seed);
+    }
+
+    let timer = null;
+    function scheduleRun() {
+      syncLabels();
+      clearTimeout(timer);
+      timer = setTimeout(runNow, 120);
+    }
+    function runNow() {
+      syncLabels();
+      const status = document.getElementById("status");
+      try {
+        status.textContent = "Считаю (логистика + n до 100k)…";
+        // yield to UI
+        requestAnimationFrame(() => {
+          try {
+            render(simulate(readParams()));
+          } catch (e) {
+            status.textContent = e.message || String(e);
+          }
+        });
+      } catch (e) {
+        status.textContent = e.message || String(e);
+      }
+    }
+
+    ["confounding", "trueAte", "n", "trim", "seed"].forEach((id) => {
+      document.getElementById(id).addEventListener("input", scheduleRun);
+    });
+    document.getElementById("run").addEventListener("click", runNow);
+    runNow();
+  </script>
+</body>
+</html>
